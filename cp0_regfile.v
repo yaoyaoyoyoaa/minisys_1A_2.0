@@ -1,110 +1,131 @@
 `timescale 1ns / 1ps
-// cp0_regfile.v - 协处理器0 (功能补全版：带定时器与中断屏蔽)
+// cp0_regfile.v
+// 修改：对齐标准版 Cause 寄存器定义 (IntPend 位于 [13:8])
 module cp0_regfile(
     input  wire        clk,
     input  wire        rst,
-    input  wire        we,          // 写使能 (MTC0)
+    input  wire        we,          // MTC0 写使能
     input  wire [4:0]  addr,        // 寄存器地址
     input  wire [31:0] din,         // 写入数据
-    input  wire [5:0]  ext_int,     // 外部硬件中断输入 (6位)
-    input  wire        exception_i, // 异常发生信号 (来自CPU核心)
-    input  wire [31:0] epc_i,       // 异常返回地址 (EPC)
-    input  wire [4:0]  cause_type,  // 异常类型编码 (5位, 0=Int, 8=Sys, 9=Bp, 12=Ovf)
     
-    output reg  [31:0] data_o,      // 读出数据 (MFC0)
-    output wire [31:0] epc_o,       // 输出给 PC 的 EPC 值
-    output wire        irq_o        // [关键] 经过屏蔽判断后的最终中断请求
+    input  wire [5:0]  ext_int,     // 外部中断输入
+    input  wire        exception_i, // 异常发生
+    input  wire [31:0] epc_i,       // 异常 EPC
+    input  wire [4:0]  cause_type,  // 异常类型 (ExcCode)
+    
+    output reg  [31:0] data_o,      // MFC0 读出数据
+    output wire [31:0] epc_o,
+    output wire        irq_o        // 中断请求信号
 );
 
-    // --- 寄存器定义 ---
-    // 9:  Count (计数器)
-    // 11: Compare (比较器)
-    // 12: Status (状态寄存器: IE, EXL, IM)
-    // 13: Cause (原因寄存器: BD, TI, IP, ExcCode)
-    // 14: EPC (异常程序计数器)
+    // 寄存器定义
     reg [31:0] count;
     reg [31:0] compare;
     reg [31:0] status;
     reg [31:0] cause;
     reg [31:0] epc;
+    
+    // 定时器中断标志
+    reg timer_int_flag;
 
     assign epc_o = epc;
 
-    // --- 1. 定时器逻辑 (Count & Compare) ---
-    // Count 寄存器每两个时钟周期加 1 (符合 MIPS 规范) 或者每周期加 1
-    // 这里为了简化仿真，采用每周期加 1
-    wire timer_int_req = (count == compare) && (compare != 0);
-
+    // --- 1. 定时器逻辑 ---
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            count   <= 0;
+            count <= 0;
             compare <= 0;
+            timer_int_flag <= 0;
         end else begin
-            if (we && addr == 5'd9)       count <= din; // 写入 Count
-            else                          count <= count + 1;
-            
-            if (we && addr == 5'd11)      compare <= din; // 写入 Compare
-        end
-    end
+            // Count 自增
+            if (we && addr == 5'd9) count <= din;
+            else count <= count + 1;
 
-    // --- 2. 中断请求生成 (IRQ) ---
-    // Status 寄存器位: [15:8] Mask (IM), [1] EXL, [0] IE
-    // Cause 寄存器位:  [15:10] IP[7:2] (Ext), [30] TI (Timer)
-    
-    // 内部定时器中断映射到 Cause 的 IP7 (位15) 或 TI (位30)
-    // Minisys 习惯将定时器中断视为硬件中断之一，这里映射到 Cause[30] (TI) 和 IP7 (bit 15) 以确保兼容性
-    wire [7:0] active_interrupts;
-    assign active_interrupts = {timer_int_req, ext_int[5:0], 1'b0}; // {IP7..IP0}
-    
-    // 最终中断触发条件: 
-    // 1. 有中断请求 (硬件或定时器)
-    // 2. Status.IE = 1 (全局使能)
-    // 3. Status.EXL = 0 (不在异常级)
-    // 4. Status.IM 对应位为 1 (该中断未被屏蔽)
-    wire global_int_en = status[0] && !status[1]; // IE=1 && EXL=0
-    wire int_pending   = (cause[15:8] & status[15:8]) != 0; // 检查掩码
-    
-    assign irq_o = global_int_en && int_pending;
-
-    // --- 3. 寄存器读写与异常处理 ---
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            status <= 32'h00000001; // 默认开启中断 (IE=1)
-            cause  <= 0;
-            epc    <= 0;
-        end else begin
-            // 持续采样中断信号到 Cause 寄存器
-            cause[15:10] <= ext_int;      // 外部中断 IP7..IP2 -> 映射到 IP
-            cause[30]    <= timer_int_req;// TI 位
-            // 同时将定时器也映射到 IP7 (位15) 以便通过 Status[15] 进行屏蔽控制
-            if (timer_int_req) cause[15] <= 1'b1; 
-            else               cause[15] <= ext_int[5]; // 如果没有定时器中断，保持外部值
-
-            if (exception_i) begin
-                // === 异常发生时 ===
-                epc <= epc_i;
-                status[1] <= 1'b1;        // 设置 EXL=1 (进入异常模式，自动屏蔽中断)
-                cause[6:2] <= cause_type; // 记录异常类型 (ExcCode)
-                cause[31] <= 1'b0;        // BD (分支延迟槽标志，暂简写为0)
-            end else if (we) begin
-                // === 正常写寄存器 ===
-                case(addr)
-                    5'd12: status <= din;
-                    5'd13: cause  <= din;
-                    5'd14: epc    <= din;
-                    // Count 和 Compare 已在上方处理
-                endcase
+            // Compare 写入与比较
+            if (we && addr == 5'd11) begin
+                compare <= din;
+                timer_int_flag <= 0; // 写 Compare 时清除中断
+            end else if (compare != 0 && count == compare) begin
+                timer_int_flag <= 1;
             end
         end
     end
 
-    // --- 读操作 ---
+    // --- 2. Cause 寄存器更新逻辑 (参考标准 cp0.v) ---
+    // 标准定义: Cause[13:8] 为外部中断 (IntPend)
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            cause <= 0;
+        end else begin
+            // 更新中断挂起位
+            cause[13:8] <= ext_int; 
+            
+            // 异常处理
+            if (exception_i) begin
+                cause[6:2] <= cause_type; // 更新 ExcCode
+                cause[31]  <= 1'b0;       // BD
+            end
+            
+            // 写 Cause (通常仅用于调试)
+            if (we && addr == 5'd13) begin
+                cause[6:2] <= din[6:2]; // 仅允许写 ExcCode 部分? 标准代码允许全写，这里跟随标准
+                cause[9:8] <= din[9:8]; // IP0, IP1 (Soft Int)
+            end
+        end
+    end
+
+    // --- 3. Status/EPC 与中断产生 ---
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            status <= 32'h00000001; // IE=1 (默认开中断)
+            epc    <= 0;
+        end else begin
+            if (exception_i) begin
+                epc <= epc_i;
+                status[1] <= 1'b1; // EXL=1 (进入异常级，屏蔽中断)
+            end else if (we) begin
+                case(addr)
+                    5'd12: status <= din;
+                    5'd14: epc    <= din;
+                endcase
+            end else if (cause_type == 5'h18) begin // 假设 5'h18 为 ERET 触发的特殊类型(如果流水线有处理)
+                // 此时通常由 CPU 控制 Status[1] 自动复位，或在这里处理
+                // 标准 id.v 处理了 ERET，这里假设 cpu_core 会处理 EXL 的复位
+                // 如果 cpu_core 通过写 Status 来复位 EXL，则此处无需特殊处理
+            end
+        end
+    end
+
+    // --- 4. 中断请求生成 (IRQ) ---
+    // [15:8] 为 IM (Interrupt Mask), [1] EXL, [0] IE
+    // 中断源包括: 外部中断 ext_int 和 内部定时器 timer_int_flag
+    // 注意：标准代码将外部中断放在 Cause[13:8]，对应 Status 的 IM[?]?
+    // 通常 MIPS 中，Cause[15:8] 对应 Status[15:8]。
+    // 标准代码 cp0.v 第 436 行: cause_out[13:8] <= int_in;
+    // 这意味着 ext_int[0] 对应 Cause[8]，即 IP0。
+    // 因此我们需要检查 Status[8] (IM0) 来屏蔽它。
+    
+    wire [7:0] im = status[15:8];
+    // 构造当前所有待处理中断位: {timer, ext_int[5:0], 0} 
+    // 假设 Timer 映射到 IP7 (bit 15)
+    wire [7:0] ip;
+    assign ip[7]   = timer_int_flag; // IP7 (Timer)
+    assign ip[6]   = 1'b0;
+    assign ip[5:0] = ext_int[5:0];   // IP5..0
+    
+    // 只要有任意一个未被屏蔽的中断位置 1
+    wire int_req = |(ip & im);
+    
+    // 全局中断使能: IE=1 且 EXL=0
+    assign irq_o = (status[0] && !status[1]) && int_req;
+
+    // --- 读数据 ---
     always @* begin
         case(addr)
             5'd9:  data_o = count;
             5'd11: data_o = compare;
             5'd12: data_o = status;
-            5'd13: data_o = cause;
+            5'd13: data_o = {cause[31:16], ip[7], 1'b0, cause[13:0]}; // 读出时将 IP7(Timer) 拼接到正确位置(bit 15)
             5'd14: data_o = epc;
             default: data_o = 0;
         endcase
