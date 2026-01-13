@@ -1,0 +1,56 @@
+:root {
+    --bg-dark: #1e1e1e;
+    --bg-panel: #252526;
+    --border: #333;
+    --accent: #007acc;
+    --text-main: #d4d4d4;
+    --keyword: #569cd6;
+    --number: #b5cea8;
+    --comment: #6a9955;
+    --string: #ce9178;
+    --operator: #d4d4d4;
+    --function: #dcdcaa;
+}
+
+body { margin: 0; padding: 0; font-family: 'Consolas', 'Monaco', monospace; background: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Toolbar */
+.toolbar { height: 50px; background: #3c3c3c; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--border); }
+.brand { font-weight: bold; font-size: 18px; margin-right: 40px; color: #fff; }
+.actions button { background: #444; border: none; color: #fff; padding: 6px 12px; margin-right: 8px; cursor: pointer; border-radius: 2px; transition: 0.2s; }
+.actions button:hover { background: #555; }
+.actions button.btn-primary { background: var(--accent); }
+.actions button.btn-primary:hover { background: #0062a3; }
+.separator { display: inline-block; width: 1px; height: 24px; background: #666; margin: 0 10px; vertical-align: middle; }
+
+/* Main Layout */
+.main-container { flex: 1; display: flex; height: calc(100vh - 50px); }
+.editor-pane, .output-pane { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
+.pane-header { height: 30px; background: var(--bg-panel); display: flex; align-items: center; padding: 0 10px; font-size: 12px; justify-content: space-between; border-bottom: 1px solid var(--border); }
+
+/* Editor */
+.editor-wrapper { flex: 1; position: relative; overflow: hidden; background: var(--bg-dark); }
+.line-numbers { position: absolute; left: 0; top: 0; bottom: 0; width: 40px; background: var(--bg-dark); color: #858585; text-align: right; padding-right: 10px; padding-top: 10px; font-size: 14px; line-height: 20px; user-select: none; border-right: 1px solid #333; z-index: 2; }
+#code-input, #highlight-layer { position: absolute; left: 45px; top: 0; right: 0; bottom: 0; padding: 10px; font-size: 14px; line-height: 20px; border: none; font-family: inherit; margin: 0; white-space: pre; overflow: auto; }
+#code-input { background: transparent; color: transparent; caret-color: #fff; resize: none; z-index: 1; outline: none; }
+#highlight-layer { z-index: 0; pointer-events: none; color: var(--text-main); }
+
+/* Syntax Highlight Colors */
+.hl-kw { color: var(--keyword); font-weight: bold; } /* Keyword */
+.hl-num { color: var(--number); } /* Number */
+.hl-str { color: var(--string); } /* String */
+.hl-com { color: var(--comment); font-style: italic; } /* Comment */
+.hl-op { color: var(--operator); } /* Operator */
+.hl-func { color: var(--function); } /* Function */
+
+/* Output Pane */
+.tabs { display: flex; background: var(--bg-panel); }
+.tab { flex: 1; background: transparent; border: none; color: #999; padding: 10px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { color: #fff; border-bottom-color: var(--accent); background: #1e1e1e; }
+.tab-content { flex: 1; display: none; overflow: auto; background: #1e1e1e; }
+.tab-content.active { display: block; }
+textarea[readonly] { width: 100%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; padding: 10px; resize: none; font-family: inherit; outline: none; box-sizing: border-box;}
+#console-log { padding: 10px; font-size: 13px; }
+.log-info { color: #fff; margin-bottom: 4px; }
+.log-success { color: #4caf50; margin-bottom: 4px; }
+.log-error { color: #f44336; margin-bottom: 4px; }

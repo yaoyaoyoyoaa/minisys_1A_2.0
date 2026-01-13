@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>MiniSys-1A Integrated Development Environment</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="toolbar">
+        <div class="brand">MiniSys-1A IDE</div>
+        <div class="actions">
+            <button onclick="ide.createNew('c')">📄 新建 C</button>
+            <div class="separator"></div>
+            <button class="btn-primary" onclick="ide.buildRun()">🔨 构建 (Build)</button>
+            <button onclick="ide.downloadCoe()">💾 导出 COE</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="editor-pane">
+            <div class="pane-header">
+                <span>源代码 (user.c)</span>
+            </div>
+            <div class="editor-wrapper">
+                <div class="line-numbers" id="line-numbers">1</div>
+                <pre class="code-highlight" id="highlight-layer"></pre>
+                <textarea id="code-input" spellcheck="false" oninput="ide.onInput()" onscroll="ide.syncScroll()"></textarea>
+            </div>
+        </div>
+
+        <div class="output-pane">
+            <div class="tabs">
+                <button class="tab active" onclick="ide.switchTab('asm')">汇编代码 (ASM)</button>
+                <button class="tab" onclick="ide.switchTab('machine')">机器码 (HEX)</button>
+                <button class="tab" onclick="ide.switchTab('log')">系统日志</button>
+            </div>
+            <div id="tab-asm" class="tab-content active">
+                <textarea readonly id="output-asm" placeholder="编译结果..."></textarea>
+            </div>
+            <div id="tab-machine" class="tab-content">
+                <textarea readonly id="output-hex" placeholder="COE 文件内容..."></textarea>
+            </div>
+            <div id="tab-log" class="tab-content">
+                <div id="console-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="utils.js"></script>
+    <script src="register.js"></script>
+    
+    <script src="macro.js"></script>
+    <script src="instruction.js"></script>
+    <script src="assembler.js"></script>
+    <script src="linker.js"></script>
+    <script src="convert.js"></script>
+    
+    <script src="mini_c.js"></script>
+    
+    <script src="main.js"></script>
+</body>
+</html>
